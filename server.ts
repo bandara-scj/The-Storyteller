@@ -15,6 +15,10 @@ async function startServer() {
     res.json({ status: "ok" });
   });
 
+  app.get("/api/config", (req, res) => {
+    res.json({ apiKey: process.env.GEMINI_API_KEY });
+  });
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },

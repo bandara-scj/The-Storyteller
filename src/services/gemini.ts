@@ -1,9 +1,38 @@
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 
-const getAi = () => new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+let cachedApiKey: string | null = null;
+
+async function getApiKey(): Promise<string> {
+  if (cachedApiKey) return cachedApiKey;
+  
+  // In development, this is injected by Vite
+  if (process.env.GEMINI_API_KEY) {
+    cachedApiKey = process.env.GEMINI_API_KEY;
+    return cachedApiKey;
+  }
+
+  // In production, fetch from the backend
+  try {
+    const res = await fetch("/api/config");
+    const data = await res.json();
+    if (data.apiKey) {
+      cachedApiKey = data.apiKey;
+      return cachedApiKey;
+    }
+  } catch (err) {
+    console.error("Failed to fetch API key from server:", err);
+  }
+  
+  throw new Error("API key is missing. Please provide a valid API key.");
+}
+
+async function getAi() {
+  const apiKey = await getApiKey();
+  return new GoogleGenAI({ apiKey });
+}
 
 export async function generateStoryStart(theme: string) {
-  const ai = getAi();
+  const ai = await getAi();
   const prompt = `Start a whimsical, magical story for a child about ${theme}. 
   Provide a catchy, magical title for the story, the first paragraph of the story (2-3 sentences), 2 options for what happens next, a detailed visual prompt for an illustration of this scene, a characterDescription (a highly detailed visual description of the main character to ensure consistency in future illustrations), and a moodColor (hex code) representing the scene's vibe.`;
   
@@ -11,7 +40,7 @@ export async function generateStoryStart(theme: string) {
 }
 
 export async function generateNextSegment(previousStory: string, choice: string) {
-  const ai = getAi();
+  const ai = await getAi();
   const prompt = `The story so far: ${previousStory}
   The child chose: ${choice}
   
@@ -51,7 +80,7 @@ async function callStoryModel(ai: GoogleGenAI, prompt: string) {
 }
 
 export async function generateIllustration(prompt: string, characterDescription?: string) {
-  const ai = getAi();
+  const ai = await getAi();
   const isGif = Math.random() < 0.5;
   const stylePrefix = isGif 
     ? "A magical, whimsical children's book illustration, colorful, enchanting, high quality, in the style of an animated GIF or pixel art GIF. " 
@@ -77,7 +106,7 @@ export async function generateIllustration(prompt: string, characterDescription?
 }
 
 export async function generateNarration(text: string) {
-  const ai = getAi();
+  const ai = await getAi();
   const response = await ai.models.generateContent({
     model: "gemini-2.5-flash-preview-tts",
     contents: [{ parts: [{ text: `Read this in an old, kind, magical storyteller voice with dramatic flare: ${text}` }] }],
@@ -99,7 +128,7 @@ export async function generateNarration(text: string) {
 }
 
 export async function generateStoryEnding(story: string) {
-  const ai = getAi();
+  const ai = await getAi();
   const prompt = `You are a magical storyteller in the style of the Brothers Grimm.
   The story so far: "${story}"
   
@@ -133,7 +162,7 @@ export async function processVoiceInput(audioBlob: Blob, options: string[]) {
     throw new Error("Empty audio blob");
   }
   
-  const ai = getAi();
+  const ai = await getAi();
   const base64Audio = await new Promise<string>((resolve) => {
     const reader = new FileReader();
     reader.onloadend = () => {
